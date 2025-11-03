@@ -1,98 +1,142 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView } from "react-native";
+import { Link } from "expo-router";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const items = [
+    { id: "1", icon: "🧥", title: "Winter Jacket - Size M", category: "Clothing", location: "Main Campus", time: "2h ago" },
+    { id: "2", icon: "📚", title: "Engineering Books", category: "Books", location: "Library", time: "5h ago" },
+    { id: "3", icon: "💡", title: "Study Lamp", category: "Stationery", location: "Hostel A", time: "1d ago" },
+    { id: "4", icon: "💼", title: "Laptop Bag", category: "Electronics", location: "Tech Block", time: "2d ago" },
+  ];
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Top Bar */}
+      <View style={styles.navBar}>
+        <Text style={styles.navTitle}>ReuseHub ♻️</Text>
+      </View>
+
+      {/* Subtitle */}
+      <Text style={styles.screenTitle}>HOME • Browse Available Items</Text>
+
+      {/* Grid */}
+      <FlatList
+        data={items}
+        keyExtractor={(item) => item.id}
+        numColumns={2}
+        contentContainerStyle={styles.grid}
+        renderItem={({ item }) => (
+          <View style={styles.card}>
+            <View style={styles.itemImage}>
+              <Text style={styles.itemIcon}>{item.icon}</Text>
+            </View>
+
+            <View style={styles.cardContent}>
+              <Text style={styles.itemTitle}>{item.title}</Text>
+              <Text style={styles.badge}>{item.category}</Text>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>📍 {item.location}</Text>
+                <Text style={styles.footerText}>{item.time}</Text>
+              </View>
+            </View>
+          </View>
+        )}
+      />
+
+      {/* Floating Add Button */}
+      <Link href="/add-item" asChild>
+        <TouchableOpacity style={styles.fab}>
+          <Text style={styles.fabText}>+</Text>
+        </TouchableOpacity>
+      </Link>
+
+      {/* Bottom Tabs */}
+      <View style={styles.tabBar}>
+        <View style={[styles.tab, styles.activeTab]}>
+          <Text style={styles.tabIcon}>🏠</Text>
+          <Text style={styles.tabLabel}>Browse</Text>
+        </View>
+        <View style={styles.tab}>
+          <Text style={styles.tabIcon}>🔍</Text>
+          <Text style={styles.tabLabel}>Explore</Text>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: { flex: 1, backgroundColor: "#F9FAFB" },
+  navBar: { backgroundColor: "#8B5CF6", padding: 18 },
+  navTitle: { fontSize: 22, fontWeight: "bold", color: "white" },
+  screenTitle: {
+    backgroundColor: "#EDE9FE",
+    textAlign: "center",
+    paddingVertical: 8,
+    fontSize: 12,
+    color: "#7C3AED",
+    fontWeight: "600",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+
+  grid: { padding: 16 },
+
+  card: {
+    backgroundColor: "white",
+    borderRadius: 14,
+    flex: 1,
+    margin: 6,
+    overflow: "hidden",
+    elevation: 3,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  itemImage: {
+    height: 110,
+    backgroundColor: "#8B5CF6",
+    alignItems: "center",
+    justifyContent: "center",
   },
+  itemIcon: { fontSize: 44, color: "white" },
+
+  cardContent: { padding: 10 },
+  itemTitle: { fontWeight: "600", fontSize: 14, color: "#111827" },
+  badge: {
+    backgroundColor: "#EDE9FE",
+    color: "#7C3AED",
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+
+  footer: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
+  footerText: { fontSize: 11, color: "#6B7280" },
+
+  fab: {
+    position: "absolute",
+    backgroundColor: "#8B5CF6",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    bottom: 80,
+    right: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 6,
+  },
+  fabText: { fontSize: 32, color: "white" },
+
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderTopWidth: 1,
+    borderColor: "#E5E7EB",
+    height: 60,
+  },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center" },
+  activeTab: { color: "#8B5CF6" },
+  tabIcon: { fontSize: 22 },
+  tabLabel: { fontSize: 11 },
 });
