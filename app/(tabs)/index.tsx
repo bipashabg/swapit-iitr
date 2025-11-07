@@ -1,7 +1,12 @@
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView } from "react-native";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
+import { supabase } from "../../lib/supabase";
+import { useEffect, useState } from "react";
 
 export default function HomeScreen() {
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
   const items = [
     { id: "1", icon: "🧥", title: "Winter Jacket - Size M", category: "Clothing", location: "Main Campus", time: "2h ago" },
     { id: "2", icon: "📚", title: "Engineering Books", category: "Books", location: "Library", time: "5h ago" },
@@ -9,11 +14,33 @@ export default function HomeScreen() {
     { id: "4", icon: "💼", title: "Laptop Bag", category: "Electronics", location: "Tech Block", time: "2d ago" },
   ];
 
+  useEffect(() => {
+    const session = supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user?.email ?? null);
+    });
+  }, []);
+
+  // ✅ Logout handler
+  const logout = async () => {
+    await supabase.auth.signOut();
+    router.replace("/auth/login");
+  };
+
   return (
     <SafeAreaView style={styles.container}>
+
       {/* Top Bar */}
       <View style={styles.navBar}>
-        <Text style={styles.navTitle}>ReuseHub ♻️</Text>
+        <Text style={styles.navTitle}>SwapIt ♻️</Text>
+
+        {userEmail && (
+          <View style={styles.userRow}>
+            <Text style={styles.userText}>Hi, {userEmail.split("@")[0]}</Text>
+            <TouchableOpacity onPress={logout}>
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Subtitle */}
@@ -53,10 +80,11 @@ export default function HomeScreen() {
 
       {/* Bottom Tabs */}
       <View style={styles.tabBar}>
-        <View style={[styles.tab, styles.activeTab]}>
-          <Text style={styles.tabIcon}>🏠</Text>
-          <Text style={styles.tabLabel}>Browse</Text>
+        <View style={[styles.tab, styles.activeTabBackground]}>
+          <Text style={[styles.tabIcon, styles.activeTabText]}>🏠</Text>
+          <Text style={[styles.tabLabel, styles.activeTabText]}>Browse</Text>
         </View>
+
         <View style={styles.tab}>
           <Text style={styles.tabIcon}>🔍</Text>
           <Text style={styles.tabLabel}>Explore</Text>
@@ -68,8 +96,13 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB" },
-  navBar: { backgroundColor: "#8B5CF6", padding: 18 },
+  navBar: { backgroundColor: "#8B5CF6", padding: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   navTitle: { fontSize: 22, fontWeight: "bold", color: "white" },
+
+  userRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  userText: { color: "white", fontWeight: "600", fontSize: 14 },
+  logoutText: { color: "white", fontWeight: "700", fontSize: 14, textDecorationLine: "underline" },
+
   screenTitle: {
     backgroundColor: "#EDE9FE",
     textAlign: "center",
@@ -136,7 +169,8 @@ const styles = StyleSheet.create({
     height: 60,
   },
   tab: { flex: 1, alignItems: "center", justifyContent: "center" },
-  activeTab: { color: "#8B5CF6" },
-  tabIcon: { fontSize: 22 },
-  tabLabel: { fontSize: 11 },
+  activeTabBackground: { backgroundColor: "#F3E8FF" },
+  activeTabText: { color: "#7C3AED" },
+  tabIcon: { fontSize: 22, color: "#6B7280" },
+  tabLabel: { fontSize: 11, color: "#6B7280" },
 });
