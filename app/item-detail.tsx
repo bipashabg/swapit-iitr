@@ -27,6 +27,8 @@ export default function ItemDetail() {
   const [loading, setLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const messagesScrollRef = useRef<ScrollView>(null);
+  const [conversations, setConversations] = useState<string[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
 
   const hardcodedItems = [
     {
@@ -100,13 +102,24 @@ export default function ItemDetail() {
     fetchItem();
   }, [id]);
 
+  // Calculate if current user owns this item
+  const isOwnItem = currentUserEmail === item?.user_email;
+
+  // Fetch conversations when owner opens chat
+  useEffect(() => {
+    if (showChat && !isHardcoded && currentUserEmail && item?.user_email && isOwnItem) {
+      fetchConversations();
+    }
+  }, [showChat, isOwnItem, currentUserEmail, item]);
+
   // Fetch messages when chat is opened and setup real-time subscription
   useEffect(() => {
     if (showChat && !isHardcoded && currentUserEmail && item?.user_email) {
-      fetchMessages();
+      if (!isOwnItem || (isOwnItem && selectedConversation)) {
+        fetchMessages();
+      }
       
       // Subscribe to new messages for this item
-      // This will listen to ALL messages for this item in real-time
       const channel = supabase
         .channel(`messages:item:${id}`)
         .on(
@@ -124,14 +137,37 @@ export default function ItemDetail() {
               newMessage.sender_email === currentUserEmail ||
               newMessage.receiver_email === currentUserEmail
             ) {
-              setMessages((prev) => {
-                // Prevent duplicates
-                if (prev.some(msg => msg.id === newMessage.id)) {
-                  return prev;
+              // If owner and selected conversation, only show messages from that person
+              if (isOwnItem && selectedConversation) {
+                if (newMessage.sender_email === selectedConversation || newMessage.receiver_email === selectedConversation) {
+                  setMessages((prev) => {
+                    if (prev.some(msg => msg.id === newMessage.id)) {
+                      return prev;
+                    }
+                    return [...prev, newMessage];
+                  });
+                  setTimeout(scrollToBottom, 100);
                 }
-                return [...prev, newMessage];
-              });
-              setTimeout(scrollToBottom, 100);
+              } else if (!isOwnItem) {
+                // For non-owners, show all their messages
+                setMessages((prev) => {
+                  if (prev.some(msg => msg.id === newMessage.id)) {
+                    return prev;
+                  }
+                  return [...prev, newMessage];
+                });
+                setTimeout(scrollToBottom, 100);
+              }
+              
+              // Update conversations list for owner
+              if (isOwnItem && newMessage.sender_email !== currentUserEmail) {
+                setConversations((prev) => {
+                  if (!prev.includes(newMessage.sender_email)) {
+                    return [...prev, newMessage.sender_email];
+                  }
+                  return prev;
+                });
+              }
             }
           }
         )
@@ -143,7 +179,39 @@ export default function ItemDetail() {
         supabase.removeChannel(channel);
       };
     }
-  }, [showChat, id, currentUserEmail, item]);
+  }, [showChat, id, currentUserEmail, item, selectedConversation, isOwnItem]);
+
+  const fetchConversations = async () => {
+    if (!currentUserEmail || !item?.user_email || isHardcoded || !isOwnItem) {
+      return;
+    }
+
+    console.log("Fetching conversations for owner:", currentUserEmail);
+
+    // Fetch all unique users who have messaged about this item
+    const { data, error } = await supabase
+      .from("messages")
+      .select("sender_email, receiver_email")
+      .eq("item_id", id)
+      .or(`sender_email.eq.${currentUserEmail},receiver_email.eq.${currentUserEmail}`);
+
+    if (error) {
+      console.error("Fetch conversations error:", error);
+    } else {
+      // Extract unique user emails (excluding the owner)
+      const uniqueUsers = new Set<string>();
+      data?.forEach((msg) => {
+        if (msg.sender_email !== currentUserEmail) {
+          uniqueUsers.add(msg.sender_email);
+        }
+        if (msg.receiver_email !== currentUserEmail) {
+          uniqueUsers.add(msg.receiver_email);
+        }
+      });
+      console.log("Found conversations with:", Array.from(uniqueUsers));
+      setConversations(Array.from(uniqueUsers));
+    }
+  };
 
   const fetchMessages = async () => {
     if (!currentUserEmail || !item?.user_email || isHardcoded) {
@@ -155,15 +223,24 @@ export default function ItemDetail() {
       return;
     }
 
-    console.log("Fetching messages for item:", id);
-    console.log("Between users:", currentUserEmail, "and", item.user_email);
+    // If owner, fetch messages with selected conversation partner
+    // If not owner, fetch messages with item owner
+    const otherUserEmail = isOwnItem ? selectedConversation : item.user_email;
+    
+    if (!otherUserEmail) {
+      console.log("No conversation partner selected");
+      return;
+    }
 
-    // Fetch all messages between current user and item owner for this specific item
+    console.log("Fetching messages for item:", id);
+    console.log("Between users:", currentUserEmail, "and", otherUserEmail);
+
+    // Fetch all messages between current user and the other user for this specific item
     const { data, error } = await supabase
       .from("messages")
       .select("*")
       .eq("item_id", id)
-      .or(`and(sender_email.eq.${currentUserEmail},receiver_email.eq.${item.user_email}),and(sender_email.eq.${item.user_email},receiver_email.eq.${currentUserEmail})`)
+      .or(`and(sender_email.eq.${currentUserEmail},receiver_email.eq.${otherUserEmail}),and(sender_email.eq.${otherUserEmail},receiver_email.eq.${currentUserEmail})`)
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -195,7 +272,15 @@ export default function ItemDetail() {
       return;
     }
 
-    if (currentUserEmail === item.user_email) {
+    // Determine the receiver email
+    const receiverEmail = isOwnItem ? selectedConversation : item.user_email;
+
+    if (!receiverEmail) {
+      Alert.alert("Error", "No conversation selected!");
+      return;
+    }
+
+    if (currentUserEmail === receiverEmail) {
       Alert.alert("Notice", "You cannot chat with yourself!");
       return;
     }
@@ -205,7 +290,7 @@ export default function ItemDetail() {
     const newMessage = {
       item_id: id,
       sender_email: currentUserEmail,
-      receiver_email: item.user_email,
+      receiver_email: receiverEmail,
       content: chatMessage.trim(),
     };
 
@@ -262,8 +347,6 @@ export default function ItemDetail() {
     );
   }
 
-  const isOwnItem = currentUserEmail === item.user_email;
-
   return (
     <LinearGradient colors={["#cfd9ff", "#e2ebf8"]} style={{ flex: 1 }}>
       <KeyboardAvoidingView 
@@ -317,28 +400,32 @@ export default function ItemDetail() {
           {/* Chat Section */}
           {!showChat ? (
             <TouchableOpacity
-              style={[styles.chatButton, isOwnItem && styles.chatButtonDisabled]}
+              style={styles.chatButton}
               onPress={() => {
-                if (isOwnItem) {
-                  Alert.alert("Notice", "This is your own item!");
-                  return;
-                }
                 setShowChat(true);
               }}
-              disabled={isOwnItem}
             >
               <Ionicons name="chatbubble-outline" size={20} color="#fff" />
               <Text style={styles.chatButtonText}>
-                {isOwnItem ? "Your Item" : "Chat with Owner"}
+                {isOwnItem ? "View Messages" : "Chat with Owner"}
               </Text>
             </TouchableOpacity>
           ) : (
             <View style={styles.chatContainer}>
               <View style={styles.chatHeader}>
                 <Text style={styles.chatTitle}>
-                  Chat with {item.user_email?.split("@")[0]}
+                  {isOwnItem 
+                    ? (selectedConversation 
+                        ? `Chat with ${selectedConversation.split("@")[0]}` 
+                        : "Your Messages")
+                    : `Chat with ${item.user_email?.split("@")[0]}`
+                  }
                 </Text>
-                <TouchableOpacity onPress={() => setShowChat(false)}>
+                <TouchableOpacity onPress={() => {
+                  setShowChat(false);
+                  setSelectedConversation(null);
+                  setMessages([]);
+                }}>
                   <Ionicons name="close-circle" size={24} color="#7B61FF" />
                 </TouchableOpacity>
               </View>
@@ -350,8 +437,61 @@ export default function ItemDetail() {
                     Chat is only available for database items
                   </Text>
                 </View>
+              ) : isOwnItem && !selectedConversation ? (
+                // Show conversation list for owner
+                <View style={styles.conversationList}>
+                  {conversations.length === 0 ? (
+                    <View style={styles.emptyChat}>
+                      <Ionicons name="chatbubbles-outline" size={48} color="#D1D5DB" />
+                      <Text style={styles.emptyText}>No messages yet</Text>
+                      <Text style={styles.emptySubtext}>
+                        When someone messages you about this item, you'll see them here
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.conversationListTitle}>
+                        People interested in this item:
+                      </Text>
+                      {conversations.map((userEmail) => (
+                        <TouchableOpacity
+                          key={userEmail}
+                          style={styles.conversationItem}
+                          onPress={() => {
+                            setSelectedConversation(userEmail);
+                          }}
+                        >
+                          <View style={styles.conversationAvatar}>
+                            <Ionicons name="person" size={24} color="#7B61FF" />
+                          </View>
+                          <View style={styles.conversationInfo}>
+                            <Text style={styles.conversationName}>
+                              {userEmail.split("@")[0]}
+                            </Text>
+                            <Text style={styles.conversationEmail}>{userEmail}</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                        </TouchableOpacity>
+                      ))}
+                    </>
+                  )}
+                </View>
               ) : (
                 <>
+                  {/* Show back button if owner is viewing a conversation */}
+                  {isOwnItem && selectedConversation && (
+                    <TouchableOpacity
+                      style={styles.backToListButton}
+                      onPress={() => {
+                        setSelectedConversation(null);
+                        setMessages([]);
+                      }}
+                    >
+                      <Ionicons name="arrow-back" size={20} color="#7B61FF" />
+                      <Text style={styles.backToListText}>Back to conversations</Text>
+                    </TouchableOpacity>
+                  )}
+
                   {/* Messages */}
                   <ScrollView 
                     style={styles.messagesContainer}
@@ -684,5 +824,59 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: "#D1D5DB",
+  },
+  conversationList: {
+    flex: 1,
+  },
+  conversationListTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  conversationItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  conversationAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#EDE9FE",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  conversationInfo: {
+    flex: 1,
+  },
+  conversationName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1F2937",
+    marginBottom: 2,
+  },
+  conversationEmail: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  backToListButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  backToListText: {
+    fontSize: 14,
+    color: "#7B61FF",
+    fontWeight: "600",
   },
 });
