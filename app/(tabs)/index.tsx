@@ -1,15 +1,22 @@
 import { useEffect, useState, useRef } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, SafeAreaView, Animated, Image, ScrollView } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, SafeAreaView, Animated, Image, ScrollView } from "react-native";
 import { useRouter, Link } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../lib/supabase";
+import { MaterialIcons, Ionicons } from "@expo/vector-icons";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [items, setItems] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  // Animations
+  const floatAnim1 = useRef(new Animated.Value(0)).current;
+  const floatAnim2 = useRef(new Animated.Value(0)).current;
+  const floatAnim3 = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
 
   const hardcodedItems = [
     {
@@ -46,11 +53,41 @@ export default function HomeScreen() {
     },
   ];
 
+  const categories = ["All", "Clothing", "Books", "Electronics", "Stationery"];
+
   useEffect(() => {
+    // Fade in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+
+    // Multiple floating animations
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, { toValue: 7, duration: 3000, useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: -7, duration: 3000, useNativeDriver: true }),
+        Animated.timing(floatAnim1, { toValue: 10, duration: 3000, useNativeDriver: true }),
+        Animated.timing(floatAnim1, { toValue: -10, duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim2, { toValue: -15, duration: 4000, useNativeDriver: true }),
+        Animated.timing(floatAnim2, { toValue: 15, duration: 4000, useNativeDriver: true }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim3, { toValue: 8, duration: 3500, useNativeDriver: true }),
+        Animated.timing(floatAnim3, { toValue: -8, duration: 3500, useNativeDriver: true }),
       ])
     ).start();
   }, []);
@@ -73,43 +110,143 @@ export default function HomeScreen() {
   };
 
   const allItems = [...items, ...hardcodedItems];
+  const filteredItems = selectedCategory === "All" 
+    ? allItems 
+    : allItems.filter(item => item.category === selectedCategory);
 
   return (
-    <LinearGradient colors={["#cfd9ff", "#e2ebf8"]} style={styles.container}>
-      <Animated.View style={[styles.floatCircle, { transform: [{ translateY: floatAnim }] }]} />
+    <LinearGradient colors={["#A78BFA", "#7C3AED", "#5B21B6"]} style={styles.container}>
+      {/* Animated Background Shapes */}
+      <Animated.View style={[styles.bgShape1, { transform: [{ translateY: floatAnim1 }] }]} />
+      <Animated.View style={[styles.bgShape2, { transform: [{ translateY: floatAnim2 }] }]} />
+      <Animated.View style={[styles.bgShape3, { transform: [{ translateY: floatAnim3 }] }]} />
+
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.navBar}>
-          <Text style={styles.navTitle}>SwapIt ♻️</Text>
-          {userEmail && (
-            <View style={styles.userRow}>
-              <Text style={styles.userText}>Hi, {userEmail.split("@")[0]}</Text>
-              <TouchableOpacity onPress={logout}>
-                <Text style={styles.logoutText}>Logout</Text>
-              </TouchableOpacity>
+        {/* Header */}
+        <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.greeting}>Welcome back 👋</Text>
+              {userEmail && (
+                <Text style={styles.userName}>{userEmail.split("@")[0]}</Text>
+              )}
             </View>
-          )}
-        </View>
-
-        <Text style={styles.screenTitle}>Browse Free & Reusable Items 👀</Text>
-
-        <ScrollView contentContainerStyle={styles.grid}>
-          {allItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.card}
-              onPress={() => router.push(`/item-detail?id=${item.id}${item.id.includes("hardcoded") ? "&hardcoded=1" : ""}`)}
-            >
-              <Image source={{ uri: item.image || item.photo_url }} style={styles.itemIcon} />
-              <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.badge}>{item.category || "Clothing"}</Text>
-              <Text style={styles.footerText}>📍 {item.location || "Unknown"}</Text>
+            <TouchableOpacity onPress={logout} style={styles.logoutButton}>
+              <Ionicons name="log-out-outline" size={24} color="#fff" />
             </TouchableOpacity>
-          ))}
-        </ScrollView>
+          </View>
 
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>{allItems.length}</Text>
+              <Text style={styles.statLabel}>Available Items</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNumber}>♻️</Text>
+              <Text style={styles.statLabel}>Reuse & Save</Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Categories */}
+        <Animated.View style={[{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoriesContainer}
+          >
+            {categories.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === cat && styles.categoryChipActive
+                ]}
+                onPress={() => setSelectedCategory(cat)}
+              >
+                <Text style={[
+                  styles.categoryText,
+                  selectedCategory === cat && styles.categoryTextActive
+                ]}>
+                  {cat}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Items Grid */}
+        <Animated.View style={[{ flex: 1, opacity: fadeAnim }]}>
+          <Text style={styles.sectionTitle}>
+            {selectedCategory === "All" ? "All Items" : selectedCategory} ({filteredItems.length})
+          </Text>
+          
+          <ScrollView 
+            contentContainerStyle={styles.grid}
+            showsVerticalScrollIndicator={false}
+          >
+            {filteredItems.map((item, index) => (
+              <Animated.View
+                key={item.id}
+                style={[
+                  styles.cardWrapper,
+                  {
+                    opacity: fadeAnim,
+                    transform: [
+                      {
+                        translateY: fadeAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [50, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => router.push(`/item-detail?id=${item.id}${item.id.includes("hardcoded") ? "&hardcoded=1" : ""}`)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.imageContainer}>
+                    <Image 
+                      source={{ uri: item.image || item.photo_url }} 
+                      style={styles.itemImage} 
+                    />
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.badgeText}>{item.category}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.cardContent}>
+                    <Text style={styles.itemTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <View style={styles.cardFooter}>
+                      <View style={styles.locationRow}>
+                        <Ionicons name="location-outline" size={14} color="#7C3AED" />
+                        <Text style={styles.locationText} numberOfLines={1}>
+                          {item.location || "Unknown"}
+                        </Text>
+                      </View>
+                      <Text style={styles.timeText}>{item.time}</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            ))}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Floating Action Button */}
         <Link href="/add-item" asChild>
-          <TouchableOpacity style={styles.fab}>
-            <Text style={styles.fabText}>+</Text>
+          <TouchableOpacity style={styles.fab} activeOpacity={0.8}>
+            <LinearGradient
+              colors={["#EC4899", "#8B5CF6"]}
+              style={styles.fabGradient}
+            >
+              <MaterialIcons name="add" size={32} color="#fff" />
+            </LinearGradient>
           </TouchableOpacity>
         </Link>
       </SafeAreaView>
@@ -118,20 +255,199 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  navBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginTop: 10 },
-  navTitle: { fontSize: 24, fontWeight: "bold", color: "#4B0082" },
-  userRow: { flexDirection: "row", alignItems: "center" },
-  userText: { marginRight: 10, color: "#4B0082" },
-  logoutText: { color: "#FF4B5C" },
-  screenTitle: { fontSize: 18, fontWeight: "600", margin: 20, color: "#4B0082" },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", paddingBottom: 120 },
-  card: { width: 160, backgroundColor: "white", margin: 10, borderRadius: 15, padding: 10, alignItems: "center" },
-  itemIcon: { width: 120, height: 120, borderRadius: 12 },
-  itemTitle: { fontWeight: "600", fontSize: 14, marginTop: 8, color: "#2E026D" },
-  badge: { fontSize: 12, color: "#fff", backgroundColor: "#7B61FF", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginVertical: 5 },
-  footerText: { fontSize: 10, color: "#2E026D" },
-  fab: { position: "absolute", bottom: 30, right: 20, backgroundColor: "#7B61FF", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
-  fabText: { color: "#fff", fontSize: 30 },
-  floatCircle: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "#D1C4FF", opacity: 0.2, top: 50, left: 50 },
+  container: { 
+    flex: 1,
+  },
+  // Animated background shapes
+  bgShape1: {
+    position: "absolute",
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    top: -50,
+    right: -80,
+  },
+  bgShape2: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    bottom: 100,
+    left: -60,
+  },
+  bgShape3: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    top: 250,
+    left: 30,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
+  },
+  greeting: {
+    fontSize: 16,
+    color: "#E9D5FF",
+    marginBottom: 4,
+  },
+  userName: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#fff",
+  },
+  logoutButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    padding: 10,
+    borderRadius: 12,
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    padding: 16,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#E9D5FF",
+  },
+  categoriesContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 10,
+  },
+  categoryChip: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    marginRight: 10,
+  },
+  categoryChipActive: {
+    backgroundColor: "#fff",
+  },
+  categoryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  categoryTextActive: {
+    color: "#7C3AED",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+  },
+  cardWrapper: {
+    width: "48%",
+    marginBottom: 16,
+  },
+  card: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  imageContainer: {
+    position: "relative",
+  },
+  itemImage: {
+    width: "100%",
+    height: 140,
+    backgroundColor: "#F3F4F6",
+  },
+  categoryBadge: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(124, 58, 237, 0.9)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  cardContent: {
+    padding: 12,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 8,
+    minHeight: 36,
+  },
+  cardFooter: {
+    gap: 4,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  locationText: {
+    fontSize: 12,
+    color: "#6B7280",
+    flex: 1,
+  },
+  timeText: {
+    fontSize: 11,
+    color: "#9CA3AF",
+  },
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  fabGradient: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
