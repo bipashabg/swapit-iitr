@@ -1,176 +1,137 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { useEffect, useState, useRef } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, SafeAreaView, Animated, Image, ScrollView } from "react-native";
+import { useRouter, Link } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../lib/supabase";
-import { useEffect, useState } from "react";
 
 export default function HomeScreen() {
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [items, setItems] = useState<any[]>([]);
 
-  const items = [
-    { id: "1", icon: "🧥", title: "Winter Jacket - Size M", category: "Clothing", location: "Main Campus", time: "2h ago" },
-    { id: "2", icon: "📚", title: "Engineering Books", category: "Books", location: "Library", time: "5h ago" },
-    { id: "3", icon: "💡", title: "Study Lamp", category: "Stationery", location: "Hostel A", time: "1d ago" },
-    { id: "4", icon: "💼", title: "Laptop Bag", category: "Electronics", location: "Tech Block", time: "2d ago" },
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  const hardcodedItems = [
+    {
+      id: "hardcoded-1",
+      image: "https://images-cdn.ubuy.co.in/6539cf4e9a1cbb1fe31f74c4-yozai-men-39-s-winter-coat-warm.jpg",
+      title: "Winter Jacket - Size M",
+      category: "Clothing",
+      location: "Rajiv Bhawan",
+      time: "2h ago",
+    },
+    {
+      id: "hardcoded-2",
+      image: "https://huyenchip.com/assets/pics/engineering-books/all-books.jpeg",
+      title: "Engineering Books",
+      category: "Books",
+      location: "Library",
+      time: "5h ago",
+    },
+    {
+      id: "hardcoded-3",
+      image: "https://www.weirdwolf.in/cdn/shop/files/main-img.jpg?v=1760602078&width=3024",
+      title: "Study Lamp",
+      category: "Stationery",
+      location: "Himalaya Bhawan",
+      time: "1d ago",
+    },
+    {
+      id: "hardcoded-4",
+      image: "https://assets.myntassets.com/w_412,q_30,dpr_3,fl_progressive,f_webp/assets/images/31537042/2025/2/17/5584cf58-e3d7-4ff4-a65b-32b22cec916a1739799521637-Mochi-Unisex-Laptop-Bag-4471739799521224-1.jpg",
+      title: "Laptop Bag",
+      category: "Electronics",
+      location: "Main Campus",
+      time: "2d ago",
+    },
   ];
 
   useEffect(() => {
-    const session = supabase.auth.getSession().then(({ data }) => {
-      setUserEmail(data.session?.user?.email ?? null);
-    });
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: 7, duration: 3000, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: -7, duration: 3000, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
 
-  // ✅ Logout handler
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUserEmail(data.session?.user?.email ?? null);
+    });
+    fetchItems();
+  }, []);
+
+  const fetchItems = async () => {
+    const { data, error } = await supabase.from("items").select("*").order("created_at", { ascending: false });
+    if (!error && data) setItems(data);
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     router.replace("/auth/login");
   };
 
+  const allItems = [...items, ...hardcodedItems];
+
   return (
-    <SafeAreaView style={styles.container}>
-
-      {/* Top Bar */}
-      <View style={styles.navBar}>
-        <Text style={styles.navTitle}>SwapIt ♻️</Text>
-
-        {userEmail && (
-          <View style={styles.userRow}>
-            <Text style={styles.userText}>Hi, {userEmail.split("@")[0]}</Text>
-            <TouchableOpacity onPress={logout}>
-              <Text style={styles.logoutText}>Logout</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-
-      {/* Subtitle */}
-      <Text style={styles.screenTitle}>HOME • Browse Available Items</Text>
-
-      {/* Grid */}
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        contentContainerStyle={styles.grid}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.itemImage}>
-              <Text style={styles.itemIcon}>{item.icon}</Text>
+    <LinearGradient colors={["#cfd9ff", "#e2ebf8"]} style={styles.container}>
+      <Animated.View style={[styles.floatCircle, { transform: [{ translateY: floatAnim }] }]} />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={styles.navBar}>
+          <Text style={styles.navTitle}>SwapIt ♻️</Text>
+          {userEmail && (
+            <View style={styles.userRow}>
+              <Text style={styles.userText}>Hi, {userEmail.split("@")[0]}</Text>
+              <TouchableOpacity onPress={logout}>
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
             </View>
+          )}
+        </View>
 
-            <View style={styles.cardContent}>
+        <Text style={styles.screenTitle}>Browse Free & Reusable Items 👀</Text>
+
+        <ScrollView contentContainerStyle={styles.grid}>
+          {allItems.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              onPress={() => router.push(`/item-detail?id=${item.id}${item.id.includes("hardcoded") ? "&hardcoded=1" : ""}`)}
+            >
+              <Image source={{ uri: item.image || item.photo_url }} style={styles.itemIcon} />
               <Text style={styles.itemTitle}>{item.title}</Text>
-              <Text style={styles.badge}>{item.category}</Text>
+              <Text style={styles.badge}>{item.category || "Clothing"}</Text>
+              <Text style={styles.footerText}>📍 {item.location || "Unknown"}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>📍 {item.location}</Text>
-                <Text style={styles.footerText}>{item.time}</Text>
-              </View>
-            </View>
-          </View>
-        )}
-      />
-
-      {/* Floating Add Button */}
-      <Link href="/add-item" asChild>
-        <TouchableOpacity style={styles.fab}>
-          <Text style={styles.fabText}>+</Text>
-        </TouchableOpacity>
-      </Link>
-
-      {/* Bottom Tabs */}
-      <View style={styles.tabBar}>
-        <View style={[styles.tab, styles.activeTabBackground]}>
-          <Text style={[styles.tabIcon, styles.activeTabText]}>🏠</Text>
-          <Text style={[styles.tabLabel, styles.activeTabText]}>Browse</Text>
-        </View>
-
-        <View style={styles.tab}>
-          <Text style={styles.tabIcon}>🔍</Text>
-          <Text style={styles.tabLabel}>Explore</Text>
-        </View>
-      </View>
-    </SafeAreaView>
+        <Link href="/add-item" asChild>
+          <TouchableOpacity style={styles.fab}>
+            <Text style={styles.fabText}>+</Text>
+          </TouchableOpacity>
+        </Link>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
-  navBar: { backgroundColor: "#8B5CF6", padding: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  navTitle: { fontSize: 22, fontWeight: "bold", color: "white" },
-
-  userRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  userText: { color: "white", fontWeight: "600", fontSize: 14 },
-  logoutText: { color: "white", fontWeight: "700", fontSize: 14, textDecorationLine: "underline" },
-
-  screenTitle: {
-    backgroundColor: "#EDE9FE",
-    textAlign: "center",
-    paddingVertical: 8,
-    fontSize: 12,
-    color: "#7C3AED",
-    fontWeight: "600",
-  },
-
-  grid: { padding: 16 },
-
-  card: {
-    backgroundColor: "white",
-    borderRadius: 14,
-    flex: 1,
-    margin: 6,
-    overflow: "hidden",
-    elevation: 3,
-  },
-  itemImage: {
-    height: 110,
-    backgroundColor: "#8B5CF6",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  itemIcon: { fontSize: 44, color: "white" },
-
-  cardContent: { padding: 10 },
-  itemTitle: { fontWeight: "600", fontSize: 14, color: "#111827" },
-  badge: {
-    backgroundColor: "#EDE9FE",
-    color: "#7C3AED",
-    alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 4,
-  },
-
-  footer: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  footerText: { fontSize: 11, color: "#6B7280" },
-
-  fab: {
-    position: "absolute",
-    backgroundColor: "#8B5CF6",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    bottom: 80,
-    right: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 6,
-  },
-  fabText: { fontSize: 32, color: "white" },
-
-  tabBar: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    borderTopWidth: 1,
-    borderColor: "#E5E7EB",
-    height: 60,
-  },
-  tab: { flex: 1, alignItems: "center", justifyContent: "center" },
-  activeTabBackground: { backgroundColor: "#F3E8FF" },
-  activeTabText: { color: "#7C3AED" },
-  tabIcon: { fontSize: 22, color: "#6B7280" },
-  tabLabel: { fontSize: 11, color: "#6B7280" },
+  container: { flex: 1 },
+  navBar: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginTop: 10 },
+  navTitle: { fontSize: 24, fontWeight: "bold", color: "#4B0082" },
+  userRow: { flexDirection: "row", alignItems: "center" },
+  userText: { marginRight: 10, color: "#4B0082" },
+  logoutText: { color: "#FF4B5C" },
+  screenTitle: { fontSize: 18, fontWeight: "600", margin: 20, color: "#4B0082" },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", paddingBottom: 120 },
+  card: { width: 160, backgroundColor: "white", margin: 10, borderRadius: 15, padding: 10, alignItems: "center" },
+  itemIcon: { width: 120, height: 120, borderRadius: 12 },
+  itemTitle: { fontWeight: "600", fontSize: 14, marginTop: 8, color: "#2E026D" },
+  badge: { fontSize: 12, color: "#fff", backgroundColor: "#7B61FF", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginVertical: 5 },
+  footerText: { fontSize: 10, color: "#2E026D" },
+  fab: { position: "absolute", bottom: 30, right: 20, backgroundColor: "#7B61FF", width: 60, height: 60, borderRadius: 30, justifyContent: "center", alignItems: "center" },
+  fabText: { color: "#fff", fontSize: 30 },
+  floatCircle: { position: "absolute", width: 200, height: 200, borderRadius: 100, backgroundColor: "#D1C4FF", opacity: 0.2, top: 50, left: 50 },
 });

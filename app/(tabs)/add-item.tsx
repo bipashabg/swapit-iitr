@@ -1,11 +1,22 @@
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Alert,
+  ScrollView,
+} from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
+import { supabase } from "../../lib/supabase";
 
 export default function AddItem() {
   const router = useRouter();
-
   const [image, setImage] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -16,10 +27,7 @@ export default function AddItem() {
       allowsEditing: true,
       quality: 0.8,
     });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
+    if (!result.canceled) setImage(result.assets[0].uri);
   };
 
   const takePhoto = async () => {
@@ -27,139 +35,172 @@ export default function AddItem() {
       allowsEditing: true,
       quality: 0.8,
     });
-
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
+    if (!result.canceled) setImage(result.assets[0].uri);
   };
 
-  const submitItem = () => {
+  // Helper: Upload image to Supabase Storage
+  // Helper: Upload image to Supabase Storage
+const uploadImage = async (uri: string, filename: string) => {
+  try {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+
+    const { data, error } = await supabase.storage
+      .from("item-photos") // bucket name
+      .upload(filename, blob, { upsert: true });
+
+    if (error) throw error;
+
+    const { data: urlData } = supabase.storage
+      .from("item-photos")
+      .getPublicUrl(filename);
+
+    return urlData.publicUrl;
+  } catch (err: any) {
+    console.log("Upload error:", err);
+    throw err;
+  }
+};
+
+
+  const submitItem = async () => {
     if (!image || !title.trim()) {
       Alert.alert("Missing Fields", "Please add an image and enter a title.");
       return;
     }
 
-    console.log({ image, title, category, location });
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) return Alert.alert("Error", "User not logged in");
 
-    Alert.alert("Item Listed 🎉", "Your item has been successfully added!");
-    router.back();
+    try {
+      const filename = `items/${crypto.randomUUID()}.jpg`;
+      const imageUrl = await uploadImage(image, filename);
+
+      const { data, error } = await supabase.from("items").insert([
+        {
+          title,
+          photo_url: imageUrl,
+          category: category || "Clothing",
+          location,
+          user_email: user.email,
+          user_name: user.email?.split("@")[0],
+        },
+      ]);
+
+      if (error) throw error;
+
+      Alert.alert("Item Listed 🎉", "Your item has been successfully added!");
+      router.back();
+    } catch (err: any) {
+      Alert.alert("Upload failed", err.message);
+    }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>List an Item ♻️</Text>
+    <LinearGradient colors={["#cfd9ff", "#e2ebf8"]} style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <Text style={styles.header}>List an Item ♻️</Text>
 
-      {/* Image Preview */}
-      {image ? (
-        <Image source={{ uri: image }} style={styles.preview} />
-      ) : (
-        <View style={styles.placeholder}>
-          <Text style={{ color: "#9CA3AF" }}>No image selected</Text>
+        {image ? (
+          <Image source={{ uri: image }} style={styles.preview} />
+        ) : (
+          <View style={styles.placeholder}>
+            <Text style={{ color: "#9CA3AF" }}>No image selected</Text>
+          </View>
+        )}
+
+        <View style={styles.imageButtons}>
+          <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+            <Text style={styles.imageButtonText}>Pick from Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
+            <Text style={styles.imageButtonText}>Take Photo</Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* Image Buttons */}
-      <View style={styles.imageButtons}>
-        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-          <Text style={styles.imageButtonText}>Pick from Gallery</Text>
+        <TextInput
+          placeholder="Item Name"
+          style={styles.input}
+          value={title}
+          onChangeText={setTitle}
+          placeholderTextColor="#7C3AED"
+        />
+        <TextInput
+          placeholder="Category"
+          style={styles.input}
+          value={category}
+          onChangeText={setCategory}
+          placeholderTextColor="#7C3AED"
+        />
+        <TextInput
+          placeholder="Location"
+          style={styles.input}
+          value={location}
+          onChangeText={setLocation}
+          placeholderTextColor="#7C3AED"
+        />
+
+        <TouchableOpacity style={styles.submitButton} onPress={submitItem}>
+          <Text style={styles.submitText}>Submit</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.imageButton} onPress={takePhoto}>
-          <Text style={styles.imageButtonText}>Take Photo</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Text Inputs */}
-      <TextInput
-        placeholder="Item Name (e.g., Study Lamp)"
-        style={styles.input}
-        value={title}
-        onChangeText={setTitle}
-      />
-
-      <TextInput
-        placeholder="Category (e.g., Stationery / Clothing / Books)"
-        style={styles.input}
-        value={category}
-        onChangeText={setCategory}
-      />
-
-      <TextInput
-        placeholder="Pickup Location (e.g., Hostel A Gate)"
-        style={styles.input}
-        value={location}
-        onChangeText={setLocation}
-      />
-
-      {/* Submit */}
-      <TouchableOpacity style={styles.submitButton} onPress={submitItem}>
-        <Text style={styles.submitText}>Submit</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#F9FAFB",
-    flexGrow: 1,
-  },
+  container: { flex: 1 },
+  scrollContainer: { padding: 20, flexGrow: 1 },
   header: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "700",
-    marginBottom: 16,
-    color: "#6D28D9",
+    marginBottom: 20,
+    color: "#4B0082",
+    textAlign: "center",
   },
-  preview: {
-    height: 200,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
+  preview: { height: 200, borderRadius: 20, marginBottom: 16 },
   placeholder: {
     height: 200,
-    borderRadius: 12,
-    backgroundColor: "#E5E7EB",
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   imageButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 16,
   },
   imageButton: {
     flex: 1,
-    backgroundColor: "#8B5CF6",
-    padding: 10,
-    borderRadius: 8,
+    backgroundColor: "rgba(123,97,255,0.7)",
+    padding: 12,
+    borderRadius: 12,
     marginHorizontal: 4,
+    alignItems: "center",
   },
-  imageButtonText: {
-    color: "white",
-    textAlign: "center",
-    fontWeight: "600",
-  },
+  imageButtonText: { color: "white", fontWeight: "600" },
   input: {
-    backgroundColor: "white",
+    backgroundColor: "rgba(255,255,255,0.25)",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 15,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    marginBottom: 14,
+    borderColor: "rgba(123,97,255,0.5)",
+    marginBottom: 16,
     fontSize: 14,
+    color: "#2E026D",
   },
   submitButton: {
-    backgroundColor: "#6D28D9",
-    paddingVertical: 14,
-    borderRadius: 10,
-    marginTop: 12,
+    backgroundColor: "#7B61FF",
+    paddingVertical: 16,
+    borderRadius: 15,
+    marginTop: 8,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
   },
-  submitText: {
-    color: "white",
-    textAlign: "center",
-    fontWeight: "700",
-    fontSize: 16,
-  },
+  submitText: { color: "white", fontWeight: "700", fontSize: 16 },
 });
