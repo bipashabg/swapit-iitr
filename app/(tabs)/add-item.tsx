@@ -10,7 +10,6 @@ import {
   ScrollView,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../../lib/supabase";
@@ -21,6 +20,8 @@ export default function AddItem() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
+  const [description, setDescription] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -39,29 +40,27 @@ export default function AddItem() {
   };
 
   // Helper: Upload image to Supabase Storage
-  // Helper: Upload image to Supabase Storage
-const uploadImage = async (uri: string, filename: string) => {
-  try {
-    const response = await fetch(uri);
-    const blob = await response.blob();
+  const uploadImage = async (uri: string, filename: string) => {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
 
-    const { data, error } = await supabase.storage
-      .from("item-photos") // bucket name
-      .upload(filename, blob, { upsert: true });
+      const { data, error } = await supabase.storage
+        .from("item-photos") // bucket name
+        .upload(filename, blob, { upsert: true });
 
-    if (error) throw error;
+      if (error) throw error;
 
-    const { data: urlData } = supabase.storage
-      .from("item-photos")
-      .getPublicUrl(filename);
+      const { data: urlData } = supabase.storage
+        .from("item-photos")
+        .getPublicUrl(filename);
 
-    return urlData.publicUrl;
-  } catch (err: any) {
-    console.log("Upload error:", err);
-    throw err;
-  }
-};
-
+      return urlData.publicUrl;
+    } catch (err: any) {
+      console.log("Upload error:", err);
+      throw err;
+    }
+  };
 
   const submitItem = async () => {
     if (!image || !title.trim()) {
@@ -72,6 +71,8 @@ const uploadImage = async (uri: string, filename: string) => {
     const user = (await supabase.auth.getUser()).data.user;
     if (!user) return Alert.alert("Error", "User not logged in");
 
+    setUploading(true);
+
     try {
       const filename = `items/${crypto.randomUUID()}.jpg`;
       const imageUrl = await uploadImage(image, filename);
@@ -81,18 +82,30 @@ const uploadImage = async (uri: string, filename: string) => {
           title,
           photo_url: imageUrl,
           category: category || "Clothing",
-          location,
+          location: location || "Not specified",
+          description: description || null,
           user_email: user.email,
           user_name: user.email?.split("@")[0],
+          created_at: new Date().toISOString(), // Add timestamp
         },
-      ]);
+      ]).select();
 
       if (error) throw error;
 
       Alert.alert("Item Listed 🎉", "Your item has been successfully added!");
+      
+      // Clear form
+      setImage(null);
+      setTitle("");
+      setCategory("");
+      setLocation("");
+      setDescription("");
+      
       router.back();
     } catch (err: any) {
       Alert.alert("Upload failed", err.message);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -119,29 +132,45 @@ const uploadImage = async (uri: string, filename: string) => {
         </View>
 
         <TextInput
-          placeholder="Item Name"
+          placeholder="Item Name *"
           style={styles.input}
           value={title}
           onChangeText={setTitle}
           placeholderTextColor="#7C3AED"
         />
         <TextInput
-          placeholder="Category"
+          placeholder="Category (e.g., Clothing, Books, Electronics)"
           style={styles.input}
           value={category}
           onChangeText={setCategory}
           placeholderTextColor="#7C3AED"
         />
         <TextInput
-          placeholder="Location"
+          placeholder="Location (e.g., Rajiv Bhawan, Library)"
           style={styles.input}
           value={location}
           onChangeText={setLocation}
           placeholderTextColor="#7C3AED"
         />
+        <TextInput
+          placeholder="Description (optional)"
+          style={[styles.input, styles.textArea]}
+          value={description}
+          onChangeText={setDescription}
+          placeholderTextColor="#7C3AED"
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+        />
 
-        <TouchableOpacity style={styles.submitButton} onPress={submitItem}>
-          <Text style={styles.submitText}>Submit</Text>
+        <TouchableOpacity 
+          style={[styles.submitButton, uploading && styles.submitButtonDisabled]} 
+          onPress={submitItem}
+          disabled={uploading}
+        >
+          <Text style={styles.submitText}>
+            {uploading ? "Uploading..." : "Submit"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
     </LinearGradient>
@@ -191,6 +220,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#2E026D",
   },
+  textArea: {
+    height: 100,
+    paddingTop: 14,
+  },
   submitButton: {
     backgroundColor: "#7B61FF",
     paddingVertical: 16,
@@ -201,6 +234,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
+  },
+  submitButtonDisabled: {
+    backgroundColor: "#9CA3AF",
+    shadowOpacity: 0.05,
   },
   submitText: { color: "white", fontWeight: "700", fontSize: 16 },
 });

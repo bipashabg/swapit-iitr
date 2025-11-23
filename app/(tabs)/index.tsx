@@ -335,15 +335,15 @@ const styles = StyleSheet.create({
   },
   categoriesContainer: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    gap: 10,
+    paddingVertical: 10,
+    gap: 8,
   },
   categoryChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
-    marginRight: 10,
+    marginRight: 8,
   },
   categoryChipActive: {
     backgroundColor: "#fff",

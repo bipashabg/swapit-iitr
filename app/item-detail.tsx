@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Alert, Modal } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../lib/supabase";
@@ -29,6 +29,8 @@ export default function ItemDetail() {
   const messagesScrollRef = useRef<ScrollView>(null);
   const [conversations, setConversations] = useState<string[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const hardcodedItems = [
     {
@@ -318,6 +320,84 @@ export default function ItemDetail() {
     setLoading(false);
   };
 
+  const deleteItem = async () => {
+    if (isHardcoded) {
+      Alert.alert(
+        "Demo Mode",
+        "This is a hardcoded item and cannot be deleted.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      "Delete Item",
+      "Are you sure you want to delete this item? This action cannot be undone.",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            
+            try {
+              // First delete all messages associated with this item
+              const { error: messagesError } = await supabase
+                .from("messages")
+                .delete()
+                .eq("item_id", id);
+
+              if (messagesError) {
+                console.error("Error deleting messages:", messagesError);
+                Alert.alert("Error", "Failed to delete item messages. Please try again.");
+                setDeleting(false);
+                return;
+              }
+
+              // Then delete the item itself
+              const { error: itemError } = await supabase
+                .from("items")
+                .delete()
+                .eq("id", id);
+
+              if (itemError) {
+                console.error("Error deleting item:", itemError);
+                Alert.alert("Error", "Failed to delete item. Please try again.");
+                setDeleting(false);
+                return;
+              }
+
+              // Navigate away immediately to prevent accessing deleted item data
+              const navigateAway = () => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/(tabs)");
+                }
+              };
+
+              // Navigate first, then show success message
+              navigateAway();
+              
+              // Small delay to ensure navigation happens first
+              setTimeout(() => {
+                Alert.alert("Success", "Item deleted successfully!");
+              }, 300);
+            } catch (error) {
+              console.error("Unexpected error:", error);
+              Alert.alert("Error", "An unexpected error occurred. Please try again.");
+              setDeleting(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const scrollToBottom = () => {
     scrollViewRef.current?.scrollToEnd({ animated: true });
   };
@@ -357,16 +437,69 @@ export default function ItemDetail() {
           contentContainerStyle={styles.container}
           ref={scrollViewRef}
         >
-          {/* Back Button */}
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#4B0082" />
-            <Text style={styles.backText}>Back</Text>
+          {/* Back Button and Delete Button Row */}
+          <View style={styles.topButtonsRow}>
+            <TouchableOpacity 
+              style={styles.backButton} 
+              onPress={() => {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  router.replace("/(tabs)");
+                }
+              }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#4B0082" />
+              <Text style={styles.backText}>Back</Text>
+            </TouchableOpacity>
+            
+            {isOwnItem && (
+              <TouchableOpacity 
+                style={[styles.deleteButton, deleting && styles.deleteButtonDisabled]} 
+                onPress={deleteItem}
+                disabled={deleting}
+              >
+                <Ionicons name="trash-outline" size={20} color="#fff" />
+                <Text style={styles.deleteButtonText}>
+                  {deleting ? "Deleting..." : "Delete"}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Item Image - Tappable to expand */}
+          <TouchableOpacity 
+            style={styles.imageContainer}
+            onPress={() => setImageModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Image source={{ uri: item.image || item.photo_url }} style={styles.image} />
+            <View style={styles.expandHint}>
+              <Ionicons name="expand-outline" size={20} color="#fff" />
+            </View>
           </TouchableOpacity>
 
-          {/* Item Image */}
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: item.image || item.photo_url }} style={styles.image} />
-          </View>
+          {/* Image Modal for Full Screen View */}
+          <Modal
+            visible={imageModalVisible}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setImageModalVisible(false)}
+          >
+            <View style={styles.modalContainer}>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setImageModalVisible(false)}
+              >
+                <Ionicons name="close-circle" size={40} color="#fff" />
+              </TouchableOpacity>
+              <Image 
+                source={{ uri: item.image || item.photo_url }} 
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+            </View>
+          </Modal>
 
           {/* Item Details Card */}
           <View style={styles.detailsCard}>
@@ -379,7 +512,9 @@ export default function ItemDetail() {
 
             <View style={styles.infoRow}>
               <Text style={styles.location}>📍 {item.location}</Text>
-              <Text style={styles.time}>🕐 {item.time || "Recently listed"}</Text>
+              <Text style={styles.time}>
+                🕐 {item.created_at ? formatTime(item.created_at) : (item.time || "Recently listed")}
+              </Text>
             </View>
 
             {item.description && (
@@ -574,16 +709,44 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  topButtonsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    marginTop: 10,
+  },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 20,
-    marginTop: 10,
   },
   backText: {
     fontSize: 16,
     color: "#4B0082",
+    fontWeight: "600",
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    shadowColor: "#DC2626",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  deleteButtonDisabled: {
+    backgroundColor: "#9CA3AF",
+    shadowOpacity: 0.1,
+  },
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "600",
   },
   loadingText: {
@@ -602,11 +765,36 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
     marginBottom: 20,
+    position: "relative",
   },
   image: {
     width: "100%",
     height: 300,
     borderRadius: 15,
+  },
+  expandHint: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    padding: 8,
+    borderRadius: 20,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCloseButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
+  modalImage: {
+    width: "100%",
+    height: "100%",
   },
   detailsCard: {
     backgroundColor: "white",
@@ -765,6 +953,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#9CA3AF",
     marginTop: 4,
+    textAlign: "center",
   },
   messageBubble: {
     padding: 12,
